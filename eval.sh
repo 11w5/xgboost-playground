@@ -9,6 +9,11 @@ echo "🧾 Black Box Challenge - Reimbursement System Evaluation"
 echo "======================================================="
 echo
 
+# <assumption>Allow per-agent history via AGENT_NAME env.</assumption>
+agent="${AGENT_NAME:-default_agent}"
+history_dir="history/${agent}"
+mkdir -p "$history_dir"
+
 # Check if jq is available
 if ! command -v jq &> /dev/null; then
     echo "❌ Error: jq is required but not installed!"
@@ -176,7 +181,7 @@ else
     echo "💡 Tips for improvement:"
     if [ $exact_matches -lt $num_cases ]; then
         echo "  Check these high-error cases:"
-        
+
         # Sort results by error (descending) in memory and show top 5
         IFS=$'\n' high_error_cases=($(printf '%s\n' "${results_array[@]}" | sort -t: -k4 -nr | head -5))
         for result in "${high_error_cases[@]}"; do
@@ -185,6 +190,21 @@ else
             printf "      Expected: \$%.2f, Got: \$%.2f, Error: \$%.2f\n" "$expected" "$actual" "$error"
         done
     fi
+
+    # <assumption>Persist predictions and summary per agent.</assumption>
+    timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+    pred_file="$history_dir/predictions_${timestamp}.csv"
+    printf "case_num,expected,actual,error,trip_duration_days,miles_traveled,total_receipts_amount\n" > "$pred_file"
+    for record in "${results_array[@]}"; do
+        IFS=: read -r case_num expected actual error trip_duration miles receipts <<< "$record"
+        printf "%s,%s,%s,%s,%s,%s,%s\n" "$case_num" "$expected" "$actual" "$error" "$trip_duration" "$miles" "$receipts" >> "$pred_file"
+    done
+
+    summary_file="$history_dir/summary.csv"
+    if [ ! -f "$summary_file" ]; then
+        printf "timestamp,num_cases,successful_runs,exact_matches,close_matches,avg_error,max_error,score,prediction_file\n" > "$summary_file"
+    fi
+    printf "%s,%s,%s,%s,%s,%s,%s,%s,%s\n" "$timestamp" "$num_cases" "$successful_runs" "$exact_matches" "$close_matches" "$avg_error" "$max_error" "$score" "$(basename "$pred_file")" >> "$summary_file"
 fi
 
 # Show errors if any
@@ -205,4 +225,4 @@ echo "  1. Fix any script errors shown above"
 echo "  2. Ensure your run.sh outputs only a number"
 echo "  3. Analyze the patterns in the interviews and public cases"
 echo "  4. Test edge cases around trip length and receipt amounts"
-echo "  5. Submit your solution via the Google Form when ready!" 
+echo "  5. Submit your solution via the Google Form when ready!"
